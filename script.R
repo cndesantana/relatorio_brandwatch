@@ -62,10 +62,22 @@ getUnigram <- function(text){
   text <- rm_nchar_words(text, n= "1")#remove words with only one character
   text <- rm_nchar_words(text, n="2")#remove words with two characters
   text <- rm_nchar_words(text, n="3")#remove words with two characters
-  text <- gsub(" *\\b[[:alpha:]]{1,2}\\b *", " ", text) # Remove 1-2 letter words
+  text <- gsub(" *\\b[[:alpha:]]{1,2}\\b *", " ", text)# Remove 1-2 letter words
   text <- gsub("^ +| +$|( ) +", "\\1", text) # Remove excessive spacing
   text <- stringi::stri_trans_general(text, "latin-ascii")
   unigram <- data.frame(words = unlist(tokenize_ngrams(text, n = 1L, n_min = 1L, simplify = TRUE)))
+  return(unigram)
+}
+
+getTrigram <- function(text){
+  text <- removeWords(text,c(stopwords("portuguese"),badwords))
+  text <- rm_nchar_words(text, n= "1")#remove words with only one character
+  text <- rm_nchar_words(text, n="2")#remove words with two characters
+  text <- rm_nchar_words(text, n="3")#remove words with two characters
+  text <- gsub(" *\\b[[:alpha:]]{1,2}\\b *", " ", text) # Remove 1-2 letter words
+  text <- gsub("^ +| +$|( ) +", "\\1", text) # Remove excessive spacing
+  text <- stringi::stri_trans_general(text, "latin-ascii")
+  unigram <- data.frame(words = unlist(tokenize_ngrams(text, n = 3L, n_min = 3L, simplify = TRUE)))
   return(unigram)
 }
 
@@ -124,7 +136,7 @@ ggplotColours <- function(n = 6, h = c(0, 360) + 15){
   hcl(h = (seq(h[1], h[2], length = n)), c = 100, l = 65)
 }
 
-plotIndiceFavorabilidade = function() {
+plotIndiceFavorabilidade = function(file) {
   filepath <- input$file$datapath
   file <- read_xlsx(filepath)
   
@@ -254,7 +266,7 @@ plotTreemap = function(text){
                               palavras >= 4*numerodereferencia ~ "mais que 100")) %>%
     mutate(classe = factor(classe, levels = c("de 1 a 5", "de 5 a 10", "de 10 a 50", "de 50 a 100", "mais que 100")))
   ggplot(unigram, aes(area = palavras, 
-                      fill = palette[as.numeric(unigram$classe)], 
+                      fill = palette[as.numeric(classe)], 
                       label = words, 
                       subgroup=palavras)) +
     geom_treemap(fill = "black") +
@@ -263,7 +275,7 @@ plotTreemap = function(text){
                       grow = F, reflow=TRUE) + 
     geom_treemap_subgroup_text(place = "bottomright", grow = F, alpha = 1, 
                                col="white", cex=10) +
-    ggtitle("Palavras mais comentadas")+
+    ggtitle("Palavras mais comentadas - #ForaKalil")+
     scale_fill_identity() +
     scale_alpha_continuous(range = c(0.4, 1),guide = 'none')
 }
@@ -289,7 +301,7 @@ plotTreemapNegativo = function(file){
     mutate(classe = factor(classe, levels = c("de 1 a 5", "de 5 a 10", "de 10 a 50", "de 50 a 100", "mais que 100")))
   colfunc <- colorRampPalette(c(cornegativo))
   ggplot(unigram, aes(area = palavras, 
-                      fill = colfunc(5)[as.numeric(unigram$classe)], 
+                      fill = colfunc(5)[as.numeric(classe)], 
                       label = words, 
                       subgroup=palavras)) +
     geom_treemap(fill = "black") +
@@ -324,7 +336,7 @@ plotTreemapPositivo = function(file){
     mutate(classe = factor(classe, levels = c("de 1 a 5", "de 5 a 10", "de 10 a 50", "de 50 a 100", "mais que 100")))
   colfunc <- colorRampPalette(c(corpositivo))
   ggplot(unigram, aes(area = palavras, 
-                      fill = colfunc(5)[as.numeric(unigram$classe)], 
+                      fill = colfunc(5)[as.numeric(classe)], 
                       label = words, 
                       subgroup=palavras)) +
     geom_treemap(fill = "black") +
@@ -333,7 +345,43 @@ plotTreemapPositivo = function(file){
                       grow = F, reflow=TRUE) + 
     geom_treemap_subgroup_text(place = "bottomright", grow = F, alpha = 1, 
                                col="white", cex=10) +
-    ggtitle(paste("Palavras mais comentadas em comentários Positivos - ",media)+
+    ggtitle(paste("Palavras mais comentadas em comentários Positivos - ",media))+
+    scale_fill_identity() +
+    scale_alpha_continuous(range = c(0.4, 1),guide = 'none')
+}
+
+
+plotTreemapNeutro = function(file){
+  media <- stringr::str_remove_all(file$Domain,".com")
+  
+  text <- toupper(file$text[which(toupper(file$polarization) == "NEUTRAL")])
+  unigram <- getUnigram(text)
+  unigram <- unigram %>% 
+    filter(!(words %in% badwords))%>% 
+    filter(!is.na(words)) %>% 
+    select(words) %>% group_by(words) %>% 
+    summarise(palavras = n()) %>% 
+    arrange(palavras) %>% tail(50)
+  numerodereferencia <- max(unigram$palavras) %/% 5
+  unigram <- unigram %>% 
+    mutate(classe = case_when(palavras < numerodereferencia ~ "de 1 a 5", 
+                              palavras < 2*numerodereferencia ~ "de 5 a 10", 
+                              palavras < 3*numerodereferencia ~ "de 10 a 50", 
+                              palavras < 4*numerodereferencia ~ "de 50 a 100", 
+                              palavras >= 4*numerodereferencia ~ "mais que 100")) %>%
+    mutate(classe = factor(classe, levels = c("de 1 a 5", "de 5 a 10", "de 10 a 50", "de 50 a 100", "mais que 100")))
+  colfunc <- colorRampPalette(c(corneutro))
+  ggplot(unigram, aes(area = palavras, 
+                      fill = colfunc(5)[as.numeric(classe)], 
+                      label = words, 
+                      subgroup=palavras)) +
+    geom_treemap(fill = "black") +
+    geom_treemap(aes(alpha=palavras)) +
+    geom_treemap_text(fontface = "italic", colour = "white", place = "centre",
+                      grow = F, reflow=TRUE) + 
+    geom_treemap_subgroup_text(place = "bottomright", grow = F, alpha = 1, 
+                               col="white", cex=10) +
+    ggtitle(paste("Palavras mais comentadas em comentários Neutros - ",media))+
     scale_fill_identity() +
     scale_alpha_continuous(range = c(0.4, 1),guide = 'none')
 }
@@ -342,7 +390,7 @@ plotIndiceFavorabilidade = function(file) {
   media <- stringr::str_remove_all(file$Domain,".com")
   
   file %>% mutate(Date = ymd_hms(Date), 
-                  Date = ceiling_date(Date, unit="day"), 
+                  Date = floor_date(Date, unit="day"), 
                   Sentiment = toupper(Sentiment)) %>% 
     group_by(Date) %>% 
     mutate(mt = n(), 
@@ -360,6 +408,7 @@ plotIndiceFavorabilidade = function(file) {
     ylim(0,1)
 }
 
+setwd("/Users/isiscosta/RScript/BadogueHigh/Paiva_BH/")
 ### read data
 fora_kalil <- search_tweets("#forakalil", n=5000)
 data_ig <- read_xlsx("RP-IG.xlsx", skip = 8)
@@ -369,20 +418,44 @@ data_kalil <- read_xlsx("Kalil - Twitter.xlsx", skip=7)
 
 ### 
 data_users_fora_kalil <- users_data(fora_kalil)
-
 ###
+
+#### select the period of the data
+data_ig <- data_ig %>% filter(ymd_hms(Date) < ymd("2020-09-26"), ymd_hms(Date) > ymd("2020-09-18"))
+data_fb <- data_fb %>% filter(ymd_hms(Date) < ymd("2020-09-26"), ymd_hms(Date) > ymd("2020-09-18"))
+data_tw <- data_tw %>% filter(ymd_hms(Date) < ymd("2020-09-26"), ymd_hms(Date) > ymd("2020-09-18"))
+
 
 ### Plots
 ### Palavras mais citadas no Fora Kalil
-p1 <- getUnigram(data_users_fora_kalil$description) %>% 
+comentarios_unicos <- data_users_fora_kalil %>% distinct(user_id, description) %>% select(description)
+p1 <- getUnigram(comentarios_unicos$description) %>% 
   filter(!is.na(words)) %>% 
   count(words) %>% arrange(n) %>% tail(30) %>% 
   ggplot(aes(x = reorder(words,n), y = n)) +
   geom_bar(stat="identity", fill = cornovo) + coord_flip() +
   theme_minimal() +
-  labs(title = "Palavras mais citadas na descrição do perfil", subtitle = "#ForaKalil",
-       y = "Número de menções", x = "Palavra")
+  labs(title = "Palavras mais citadas na descrição do perfil", 
+       subtitle = "#ForaKalil",
+       y = "Número de menções", 
+       x = "Palavra")
 png("palavras_descricao_forakalil.png",width=3200,height=1800,res=300)
+print(p1)
+dev.off()
+
+### Trigramas mais citados no Fora Kalil
+comentarios_unicos <- data_users_fora_kalil %>% distinct(user_id, description) %>% select(description)
+p1 <- getTrigram(comentarios_unicos$description) %>% 
+  filter(!is.na(words)) %>% 
+  count(words) %>% arrange(n) %>% tail(30) %>% 
+  ggplot(aes(x = reorder(words,n), y = n)) +
+  geom_bar(stat="identity", fill = cornovo) + coord_flip() +
+  theme_minimal() +
+  labs(title = "Trigramas mais citadas na descrição do perfil", 
+       subtitle = "#ForaKalil",
+       y = "Número de menções", 
+       x = "Trigramas")
+png("trigramas_descricao_forakalil.png",width=3200,height=1800,res=300)
 print(p1)
 dev.off()
   
@@ -421,7 +494,7 @@ dev.off()
 
 #### Serie temporal
 p1 <- fora_kalil %>% 
-  mutate(data = ymd_hms(created_at), data = ceiling_date(data, unit = "hour")) %>% 
+  mutate(data = ymd_hms(created_at), data = floor_date(data, unit = "hour")) %>% 
   count(data) %>% ggplot(aes(x = data, y = n)) + 
   geom_bar(stat="identity", fill = cornovo) + theme_minimal()  + 
   labs(title = "Número de tweets no tempo", subtitle = "#ForaKalil", 
@@ -441,6 +514,40 @@ dev.off()
 
 png("serie_temporal_twitter.png",width=3200,height=1800,res=300)
 plotSerieTemporal(data_tw)
+dev.off()
+
+##### plotar trigramas
+png("trigrama_facebook.png",width=3200,height=1800,res=300)
+getTrigram(data_fb$`Full Text`) %>% filter(!is.na(words)) %>% 
+  count(words) %>% arrange(n) %>% tail(30) %>% 
+  ggplot(aes(x = reorder(words,n), y = n)) +
+  geom_bar(stat="identity", fill = cornovo) + coord_flip() +
+  theme_minimal() +
+  labs(title = "Trigramas mais citadas - Facebook", 
+       y = "Número de menções", 
+       x = "Trigramas")
+dev.off()
+
+png("trigrama_instagram.png",width=3200,height=1800,res=300)
+getTrigram(data_ig$Snippet)%>%filter(!is.na(words)) %>% 
+  count(words) %>% arrange(n) %>% tail(30) %>% 
+  ggplot(aes(x = reorder(words,n), y = n)) +
+  geom_bar(stat="identity", fill = cornovo) + coord_flip() +
+  theme_minimal() +
+  labs(title = "Trigramas mais citadas - Instagram", 
+       y = "Número de menções", 
+       x = "Trigramas")
+dev.off()
+
+png("trigrama_twitter.png",width=3200,height=1800,res=300)
+getTrigram(data_tw$Snippet)%>%filter(!is.na(words)) %>% 
+  count(words) %>% arrange(n) %>% tail(30) %>% 
+  ggplot(aes(x = reorder(words,n), y = n)) +
+  geom_bar(stat="identity", fill = cornovo) + coord_flip() +
+  theme_minimal() +
+  labs(title = "Trigramas mais citadas - Twitter", 
+       y = "Número de menções", 
+       x = "Trigramas")
 dev.off()
 
 
@@ -472,6 +579,20 @@ png("treemap_negativo_twitter.png",width=3200,height=1800,res=300)
 plotTreemapNegativo(data.frame(text = data_tw$Snippet, polarization = data_tw$Sentiment, Domain = data_tw$Domain))
 dev.off()
 
+###### plotar treemap neutro
+
+png("treemap_neutro_facebook.png",width=3200,height=1800,res=300)
+plotTreemapNeutro(data.frame(text = data_fb$`Full Text`, polarization = data_fb$Sentiment, Domain = data_fb$Domain))
+dev.off()
+
+png("treemap_neutro_instagram.png",width=3200,height=1800,res=300)
+plotTreemapNeutro(data.frame(text = data_ig$Snippet, polarization = data_ig$Sentiment, Domain = data_ig$Domain))
+dev.off()
+
+png("treemap_neutro_twitter.png",width=3200,height=1800,res=300)
+plotTreemapNeutro(data.frame(text = data_tw$Snippet, polarization = data_tw$Sentiment, Domain = data_tw$Domain))
+dev.off()
+
 ###### Indice de Favorabilidade
 
 png("favorabilidade_facebook.png",width=3200,height=1800,res=300)
@@ -484,6 +605,42 @@ dev.off()
 
 png("favorabilidade_twitter.png",width=3200,height=1800,res=300)
 plotIndiceFavorabilidade(data_tw)
+dev.off()
+
+
+#### Temas
+
+plotTendenciaTemas <- function(df_data){
+  media <- stringr::str_remove_all(df_data$Domain, ".com")[1]
+df_data %>% separate_rows(Tags, sep=",") %>%
+  filter(!is.na(Tags)) %>%
+  mutate(Tags = tolower(Tags), Tags = stringr::str_trim(Tags, side = "both")) %>%
+  group_by(Tags) %>%mutate(total = n()) %>% ungroup()%>%
+  group_by(Sentiment, Tags, total) %>%
+  summarise(parcial = n())%>%
+  ggplot(aes(x = reorder(Tags,total), y = parcial, fill = Sentiment)) +
+  geom_bar(stat="identity")+
+  coord_flip()+
+  theme_minimal()+
+  labs(title = paste("Temas dos posts - ",media), 
+       x = "Temas", 
+       y = "Número de ocorrências", 
+       fill = "Sentimento", 
+       subtitle =  paste("Semana",paste(ymd_hms(df_data$Date) %>% format("%d-%m-%Y") %>% range(),collapse = " a ")))+
+  theme(text = element_text(size=12)) +
+  scale_fill_manual("Sentimento", values = c("positive" = corpositivo, "negative" = cornegativo, "neutral" = corneutro))
+}
+
+png("tendencia_temas_facebook.png",width=3200,height=1800,res=300)
+plotTendenciaTemas(data_fb)
+dev.off()
+
+png("tendencia_temas_instagram.png",width=3200,height=1800,res=300)
+plotTendenciaTemas(data_ig)
+dev.off()
+
+png("tendencia_temas_twitter.png",width=3200,height=1800,res=300)
+plotTendenciaTemas(data_tw)
 dev.off()
 
 
